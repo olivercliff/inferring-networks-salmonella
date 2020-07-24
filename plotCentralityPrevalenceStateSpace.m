@@ -6,15 +6,12 @@ cluster_D = network.cluster_D;
 max_cluster = network.max_cluster;
 mynet = network.(approach);
 
-marker_col = [.4 .4 .4];
 marker_alpha = .7;
 if nargin < 3
   member_scaler = 0.8;
 end
 
 %% Overlapping Approach
-
-marker_sz = 30;
 
 clusters = mynet.clusters.overlapping;
 

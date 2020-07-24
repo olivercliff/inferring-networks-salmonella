@@ -18,11 +18,6 @@ paths = net.(fld).unique_paths;
 clusters = net.clusters.overlapping;
 adj = net.(fld).adj_mat;
 
-max_distance = size(net.profile,2)-1;
-
-fh = figure;
-hold on;
-
 %% Get direction/severity of paths
 
 U = length(paths);
@@ -52,23 +47,39 @@ lr_bt = lr & bt;
 rl_tb = rl & tb;
 lr_tb= lr & tb;
 
-fprintf('Number of nodes in the directed network: %d; number of paths: %d\n', sum(sum(adj,2)>0), length(paths));
-fprintf('Average direction:\n| %.2f | %.2f |\n| %.2f | %.2f |\n', mean(lr_tb), mean(rl_tb), mean(lr_bt), mean(rl_bt) );
-
-fprintf('Average starting prevalence:\n| %.2f | %.2f |\n| %.2f | %.2f |\n', mean(y_i(lr_tb)), mean(y_i(rl_tb)), mean(y_i(lr_bt)), mean(y_i(rl_bt)) );
-fprintf('Average starting centrality:\n| %.2f | %.2f |\n| %.2f | %.2f |\n', mean(x_i(lr_tb)), mean(x_i(rl_tb)), mean(x_i(lr_bt)), mean(x_i(rl_bt)) );
+fprintf('Number of nodes in the directed network: %d; number of paths: %d\n',...
+          sum(sum(adj,2)>0), length(paths));
+fprintf('Average direction:\n| %.2f | %.2f |\n| %.2f | %.2f |\n',...
+          mean(lr_tb), mean(rl_tb), mean(lr_bt), mean(rl_bt) );
 
 ul = unique(ell);
 mus = zeros(length(ul),1);
 Ns = zeros(length(ul),1);
 dirs = zeros(length(ul),4);
-
+i_coord = zeros(length(ul),2);
 for i = 1:length(ul)
     id = ell == ul(i);
     mus(i) = mean(y_f(id)-y_i(id));
     Ns(i) = sum(id);
     dirs(i,:) = [mean(rl_bt(id)), mean(lr_bt(id)), mean(rl_tb(id)), mean(lr_tb(id))];
 end
+
+figure;
+plot(x_i,y_f - y_i,'k.');
+
+figure;
+plot(y_i,y_f - y_i,'k.');
+
+figure;
+gain = y_f-y_i;
+exploit_ids = gain > 0;
+% plot([x_i(exploit_ids) x_f(exploit_ids)], [y_i(exploit_ids) y_f(exploit_ids)],'color',[.8 .8 .8]);
+hold on;
+scatter(x_i(~exploit_ids),y_i(~exploit_ids),20,[.4 .4 .4],'filled');
+scatter(x_i(exploit_ids),y_i(exploit_ids),20,gain(exploit_ids));
+scatter(x_f(exploit_ids),y_f(exploit_ids),20,gain(exploit_ids),'filled');
+set(gca,'yscale','log');
+colormap('copper');
 
 figure( 'position',[1169 618 570 341] );
 hold on;
