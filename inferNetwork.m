@@ -19,10 +19,6 @@ cdfs = mynet.(fld).cdfs;
 
 %% Build or load adjacency matrix
 
-% alpha = 0.002; % Good for SL
-% alpha = 0.003; % Good for SL
-% alpha = 0.004; % Good for ML
-
 % Build adjacency matrix
 fprintf('Building adjacency matrix...\n');
 

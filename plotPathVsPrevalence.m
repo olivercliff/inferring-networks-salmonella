@@ -1,5 +1,7 @@
 function plotPathVsPrevalence(matfile,approach,multiple_loci)
 
+addpath ./utils/
+
 plot_geographic = false;
 plot_case_studies = false;
 
@@ -64,22 +66,156 @@ for i = 1:length(ul)
     dirs(i,:) = [mean(rl_bt(id)), mean(lr_bt(id)), mean(rl_tb(id)), mean(lr_tb(id))];
 end
 
-figure;
-plot(x_i,y_f - y_i,'k.');
+%% Contour state-space map (expected gain in prevalence)
+xcells = 10; ycells = 10;
 
-figure;
-plot(y_i,y_f - y_i,'k.');
-
-figure;
 gain = y_f-y_i;
-exploit_ids = gain > 0;
-% plot([x_i(exploit_ids) x_f(exploit_ids)], [y_i(exploit_ids) y_f(exploit_ids)],'color',[.8 .8 .8]);
+
+ly_i = log10(y_i);
+
+[idX,edgeX] = discretize(x_i,xcells);
+[idY,edgeY] = discretize(ly_i,ycells);
+
+gridGain = zeros(length(edgeX), length(edgeY));
+gridNum = zeros(length(edgeX), length(edgeY));
+for i = 1:length(edgeY)
+  for j = 1:length(edgeX)
+    gridGain(i,j) = mean(gain(idX == j & idY == i));
+    gridNum(i,j) = sum(idX == j & idY == i);
+  end
+end
+
+% Unique starting points, do not repeat by prevalence
+% heatmap_opt = 1;
+% Unique starting points, repeat by prevalence
+heatmap_opt = 2;
+
+cmap = flipud(colormap('hot'));
+% cmap = turbo(64);
+
+[gridX,gridY] = meshgrid(edgeX,edgeY);
+
+[uniq_ss,~,uniq_idc] = unique([x_i,ly_i],'rows');
+
+if heatmap_opt == 2
+    obs = [];
+    inv_obs = [];
+    reps = [];
+    inv_reps = [];
+end
+
+gains = zeros(length(uniq_ss),1);
+for i = 1:length(uniq_ss)
+  gains(i) = max(gain(uniq_idc == i));
+  
+  if heatmap_opt == 2
+    if gains(i) > 0
+      reps = [reps; ceil(gains(i))];
+      obs = [obs;repmat(uniq_ss(i,:),reps(end),1)];
+    else
+      inv_reps = [inv_reps; ceil(-gains(i))+1];
+      inv_obs = [inv_obs;repmat(uniq_ss(i,:),inv_reps(end),1)];
+    end   
+  end
+end
+
+if heatmap_opt == 1
+  obs = uniq_ss(gains > 0, :);
+  inv_obs = uniq_ss(gains <=0, :);
+end
+
+[gridXfine,gridYfine] = meshgrid(linspace(edgeX(1),edgeX(end)*1.05,100),...
+                                  linspace(edgeY(1),edgeY(end)*1.05,100));
+xi = [gridXfine(:),gridYfine(:)];
+
+f = ksdensity(obs(:,1:2),xi);
+gridF = reshape(f,size(gridXfine));
+
+figure;
+im = imagesc([gridXfine(1),gridXfine(end)],...
+               [gridYfine(1),gridYfine(end)],...
+                gridF);
+im.AlphaData = 0.8;
+
+colormap(cmap);
 hold on;
-scatter(x_i(~exploit_ids),y_i(~exploit_ids),20,[.4 .4 .4],'filled');
-scatter(x_i(exploit_ids),y_i(exploit_ids),20,gain(exploit_ids));
-scatter(x_f(exploit_ids),y_f(exploit_ids),20,gain(exploit_ids),'filled');
-set(gca,'yscale','log');
-colormap('copper');
+if heatmap_opt == 1
+  plot(obs(:,1),obs(:,2),'k.');
+else
+  uniq_obs = uniq_ss(gains>0,:);
+  scatter(uniq_obs(:,1),uniq_obs(:,2),reps.*2,'k',...
+            'filled','MarkerFaceAlpha',.4,'MarkerEdgeAlpha',.8);
+end
+axis tight;
+xlabel('Centrality');
+ylabel('Prevalence (log)');
+zlabel('Probability of increased prevalence');
+set(gca,'ydir','normal');
+title('Probability of virulent strain');
+
+inv_f = ksdensity(inv_obs(:,1:2),xi);
+gridinvF = reshape(inv_f,size(gridXfine));
+
+figure;
+im = imagesc([gridXfine(1),gridXfine(end)],...
+              [gridYfine(1),gridYfine(end)],...
+              gridinvF);
+im.AlphaData = 0.8;
+
+colormap(cmap);
+hold on;
+if heatmap_opt == 1
+  plot(inv_obs(:,1),inv_obs(:,2),'k.');
+else
+  uniq_inv_obs = uniq_ss(gains<=0,:);
+  scatter(uniq_inv_obs(:,1),uniq_inv_obs(:,2),inv_reps.*2,'k',...
+            'filled','MarkerFaceAlpha',.4,'MarkerEdgeAlpha',.8);
+end
+axis tight;
+xlabel('Centrality');
+ylabel('Prevalence (log)');
+zlabel('Probability of increased prevalence');
+set(gca,'ydir','normal')
+title('Probability of benign strain');
+
+figure;
+h = pcolor(gridX, gridY, gridGain);
+set(h,'edgecolor',[.7 .7 .7],'facealpha',.3);
+hold on;
+
+sz = abs(gains).*2;
+scatter(uniq_ss(:,1),uniq_ss(:,2),sz+1,gains,'filled',...
+          'MarkerFaceAlpha',.2,'MarkerEdgeAlpha',.2,'MarkerEdgeColor','k');
+
+set(gca,'clim',[-15 15],'ydir','normal');
+
+cmap = redblue(64);
+colormap(cmap);
+
+xlabel('Centrality');
+ylabel('Prevalence (log)');
+        
+% exploitative = gains > 0;
+% Mdl = fitcsvm(uniq_ss, exploitative,'Weights',abs(gains)./max(abs(gains)),...
+%                     'KernelFunction','rbf',...
+%                     'Standardize',true,...
+%                     'OptimizeHyperparameters','auto',...
+%                     'KernelScale','auto');
+% 
+% exploitativehat = predict(Mdl,uniq_ss);
+% 
+% C = confusionmat(exploitative,exploitativehat);
+% fprintf('TPR: %.3f\n', C(2,2) / (C(1,2) + C(2,2)));
+% fprintf('FPR: %.3f\n', C(1,2) / (C(1,2) + C(2,2)));
+% 
+% figure;
+% confusionchart(exploitative,exploitativehat);
+% 
+% % figure;
+% sv = Mdl.SupportVectors;
+% plot(sv(:,1),sv(:,2),'ko');
+
+%% Path characteristics
 
 figure( 'position',[1169 618 570 341] );
 hold on;
