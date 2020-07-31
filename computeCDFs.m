@@ -1,4 +1,4 @@
-function computeCDFs(matfile,approach,max_distance,multiple_loci,up_to_ml)
+function computeCDFs(matfile,approach,multiple_loci,up_to_ml)
 % Build the cumua
 
 if nargin < 5
@@ -20,22 +20,20 @@ mynet.(fld).cdfs.up_to_ml = up_to_ml;
 
 M = size(mynet.profile,1); % Number of unique profiles
 L = size(mynet.profile,2); % Number of locis
-
 T = length(events.dates); % Length of dataset
-D = max_distance;
 
-ds = [0.5 1:D inf];
+ds = [0.5 1:L inf];
 
 mynet.(fld).cdfs.distance_edges = ds;
 
 edges = 0:1:T;
 mynet.(fld).cdfs.temporal_edges = edges;
 
-dp_hist = zeros(length(edges)-1,D,M);
-df_hist = zeros(length(edges)-1,D,M);
+dp_hist = zeros(length(edges)-1,L,M);
+df_hist = zeros(length(edges)-1,L,M);
 
-indp_hist = zeros(length(edges)-1,D,M);
-indf_hist = zeros(length(edges)-1,D,M);
+indp_hist = zeros(length(edges)-1,L,M);
+indf_hist = zeros(length(edges)-1,L,M);
 
 fprintf('Building frequency distributions...\n');
 
@@ -69,10 +67,10 @@ for m = 1:M
     end
     events.(approach).genetic_distances(:,m) = l1_norm;
 
-    for d = 1:D
+    for l = 1:L
 
-      % Find MLVAs that are within genetic distance D
-      valid_dates = events.dates(l1_norm>ds(d) & l1_norm<=ds(d+1));
+      % Find MLVAs that are within genetic distance L
+      valid_dates = events.dates(l1_norm>ds(l) & l1_norm<=ds(l+1));
 
       if isempty(valid_dates)
         continue;
@@ -94,14 +92,14 @@ for m = 1:M
         end
       end
 
-      indp_hist(:,d,m) = histcounts(diffs_p(2:end),edges);
-      indf_hist(:,d,m) = histcounts(diffs_f(2:end),edges);
+      indp_hist(:,l,m) = histcounts(diffs_p(2:end),edges);
+      indf_hist(:,l,m) = histcounts(diffs_f(2:end),edges);
 
       % Include after FIRST instance (potential mutation) and...
-      dp_hist(:,d,m) = histcounts(diffs_p,edges);
+      dp_hist(:,l,m) = histcounts(diffs_p,edges);
 
       % ...include before FIRST instance (potential mutation).
-      df_hist(:,d,m) = histcounts(diffs_f,edges);
+      df_hist(:,l,m) = histcounts(diffs_f,edges);
     end
   end
 
@@ -143,11 +141,11 @@ fm_ptg = ppt_gm./ppt_g;
 fm_ftg = pft_gm./pft_g;
 
 % p(~M | G ), probability of NOT a mutation given genetic distance)
-pm_g_pt = zeros(1,D);
-pm_g_ft = zeros(1,D);
-for d = 1:D
-  pm_g_pt(d) = 1./nansum( fm_ptg(~isinf(fm_ptg(:,d)),d) );
-  pm_g_ft(d) = 1./nansum( fm_ftg(~isinf(fm_ftg(:,d)),d) );
+pm_g_pt = zeros(1,L);
+pm_g_ft = zeros(1,L);
+for l = 1:L
+  pm_g_pt(l) = 1./nansum( fm_ptg(~isinf(fm_ptg(:,l)),l) );
+  pm_g_ft(l) = 1./nansum( fm_ftg(~isinf(fm_ftg(:,l)),l) );
 end
 
 pm_ptg = pm_g_pt.*fm_ptg;

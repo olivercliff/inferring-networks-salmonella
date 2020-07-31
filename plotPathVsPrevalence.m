@@ -1,9 +1,11 @@
-function plotPathVsPrevalence(matfile,approach,multiple_loci)
+function plotPathVsPrevalence(matfile,approach,multiple_loci,for_paper)
 
 addpath ./utils/
+addpath ./utils/cbrewer
 
-plot_geographic = false;
-plot_case_studies = false;
+if nargin < 4
+  for_paper = false;
+end
 
 if multiple_loci
   fld = 'multiloci';
@@ -38,6 +40,8 @@ x_f = 1./net.path_lengths(m_f);
 y_i = clusters.mean_inc(m_i);
 y_f = clusters.mean_inc(m_f);
 
+ly_i = log10(y_i);
+
 lr = x_f>x_i;
 bt = y_f>y_i;
 
@@ -58,7 +62,6 @@ ul = unique(ell);
 mus = zeros(length(ul),1);
 Ns = zeros(length(ul),1);
 dirs = zeros(length(ul),4);
-i_coord = zeros(length(ul),2);
 for i = 1:length(ul)
     id = ell == ul(i);
     mus(i) = mean(y_f(id)-y_i(id));
@@ -66,154 +69,222 @@ for i = 1:length(ul)
     dirs(i,:) = [mean(rl_bt(id)), mean(lr_bt(id)), mean(rl_tb(id)), mean(lr_tb(id))];
 end
 
-%% Contour state-space map (expected gain in prevalence)
-xcells = 10; ycells = 10;
+%% Compute the expected value by kernel density estimation
 
-gain = y_f-y_i;
-
-ly_i = log10(y_i);
-
-[idX,edgeX] = discretize(x_i,xcells);
-[idY,edgeY] = discretize(ly_i,ycells);
-
-gridGain = zeros(length(edgeX), length(edgeY));
-gridNum = zeros(length(edgeX), length(edgeY));
-for i = 1:length(edgeY)
-  for j = 1:length(edgeX)
-    gridGain(i,j) = mean(gain(idX == j & idY == i));
-    gridNum(i,j) = sum(idX == j & idY == i);
-  end
+if for_paper
+  xcells = 1000;
+  ycells = 1000;
+else
+  xcells = 100;
+  ycells = 100;
 end
 
-% Unique starting points, do not repeat by prevalence
-% heatmap_opt = 1;
-% Unique starting points, repeat by prevalence
-heatmap_opt = 2;
+% Inlclude starting points that don't have chains
+x_i_all = 1./net.path_lengths;
+ly_i_all = log10(clusters.mean_inc);
 
 cmap = flipud(colormap('hot'));
 % cmap = turbo(64);
 
-[gridX,gridY] = meshgrid(edgeX,edgeY);
+[~,unconnected_ids] = setdiff([x_i_all,ly_i_all],[x_i,ly_i],'rows');
 
-[uniq_ss,~,uniq_idc] = unique([x_i,ly_i],'rows');
+x_i_unconnected = x_i_all(unconnected_ids);
+ly_i_unconnected = ly_i_all(unconnected_ids);
 
-if heatmap_opt == 2
-    obs = [];
-    inv_obs = [];
-    reps = [];
-    inv_reps = [];
-end
+x_i_combined = [x_i;x_i_unconnected];
+ly_i_combined = [ly_i;ly_i_unconnected];
+
+[uniq_ss,~,uniq_idc] = unique([x_i_combined,ly_i_combined],'rows','stable');
+
+gain = [y_f-y_i;zeros(length(unconnected_ids),1)];
 
 gains = zeros(length(uniq_ss),1);
+
+obs = [];
 for i = 1:length(uniq_ss)
-  gains(i) = max(gain(uniq_idc == i));
+  gains(i) = mean(gain(uniq_idc == i));
   
-  if heatmap_opt == 2
-    if gains(i) > 0
-      reps = [reps; ceil(gains(i))];
-      obs = [obs;repmat(uniq_ss(i,:),reps(end),1)];
-    else
-      inv_reps = [inv_reps; ceil(-gains(i))+1];
-      inv_obs = [inv_obs;repmat(uniq_ss(i,:),inv_reps(end),1)];
-    end   
+  % Repeat observations to weight prob. by virulence
+  if gains(i) > 0
+    reps = ceil(gains(i));
+    obs = [obs;repmat(uniq_ss(i,:),reps,1)];
+  else
+    obs = [obs;uniq_ss(i,:)];
+  end   
+end
+
+if for_paper
+  [gridX,gridY] = meshgrid(linspace(0,0.037,xcells),...
+                            linspace(0,log10(200),ycells));
+else
+  [gridX,gridY] = meshgrid(linspace(min(x_i_all),max(x_i_all)*1.05,xcells),...
+                                  linspace(min(ly_i_all),max(ly_i_all)*1.05,ycells));
+end
+xi = [gridX(:),gridY(:)];
+
+[~,~,bw] = ksdensity(obs(:,1:2),xi);
+
+grid_exp_trunc = zeros(size(gridX));
+grid_exp_pos = zeros(size(gridX));
+grid_exp_neg = zeros(size(gridX));
+
+gains_trunc = gains;
+gains_trunc(gains_trunc<1) = 1;
+
+pos_ids = gains>0;
+neg_ids = gains<=0;
+
+for i = 1:size(gridX,1)
+  for j = 1:size(gridX,2)
+    cX = ([gridX(i,j),gridY(i,j)] - uniq_ss) ./ bw;
+    prob = mvnpdf(cX);
+    grid_exp_trunc(i,j) = sum(prob .* gains_trunc);
+    
+    cX = ([gridX(i,j),gridY(i,j)] - uniq_ss) ./ (bw.*3.5);
+    prob_pos = mvnpdf(cX);
+    
+    cX = ([gridX(i,j),gridY(i,j)] - uniq_ss) ./ (bw.*1.5);
+    prob_neg = mvnpdf(cX);
+    
+    grid_exp_pos(i,j) = sum(prob_pos(pos_ids) .* gains(pos_ids));
+    grid_exp_neg(i,j) = sum(prob_neg(neg_ids) .* gains(neg_ids));
   end
 end
 
-if heatmap_opt == 1
-  obs = uniq_ss(gains > 0, :);
-  inv_obs = uniq_ss(gains <=0, :);
-end
+%% Plot the expected value from kernel density estimation
 
-[gridXfine,gridYfine] = meshgrid(linspace(edgeX(1),edgeX(end)*1.05,100),...
-                                  linspace(edgeY(1),edgeY(end)*1.05,100));
-xi = [gridXfine(:),gridYfine(:)];
-
-f = ksdensity(obs(:,1:2),xi);
-gridF = reshape(f,size(gridXfine));
-
-figure;
-im = imagesc([gridXfine(1),gridXfine(end)],...
-               [gridYfine(1),gridYfine(end)],...
-                gridF);
-im.AlphaData = 0.8;
-
-colormap(cmap);
-hold on;
-if heatmap_opt == 1
-  plot(obs(:,1),obs(:,2),'k.');
-else
-  uniq_obs = uniq_ss(gains>0,:);
-  scatter(uniq_obs(:,1),uniq_obs(:,2),reps.*2,'k',...
-            'filled','MarkerFaceAlpha',.4,'MarkerEdgeAlpha',.8);
-end
-axis tight;
-xlabel('Centrality');
-ylabel('Prevalence (log)');
-zlabel('Probability of increased prevalence');
-set(gca,'ydir','normal');
-title('Probability of virulent strain');
-
-inv_f = ksdensity(inv_obs(:,1:2),xi);
-gridinvF = reshape(inv_f,size(gridXfine));
-
-figure;
-im = imagesc([gridXfine(1),gridXfine(end)],...
-              [gridYfine(1),gridYfine(end)],...
-              gridinvF);
-im.AlphaData = 0.8;
-
-colormap(cmap);
-hold on;
-if heatmap_opt == 1
-  plot(inv_obs(:,1),inv_obs(:,2),'k.');
-else
-  uniq_inv_obs = uniq_ss(gains<=0,:);
-  scatter(uniq_inv_obs(:,1),uniq_inv_obs(:,2),inv_reps.*2,'k',...
-            'filled','MarkerFaceAlpha',.4,'MarkerEdgeAlpha',.8);
-end
-axis tight;
-xlabel('Centrality');
-ylabel('Prevalence (log)');
-zlabel('Probability of increased prevalence');
-set(gca,'ydir','normal')
-title('Probability of benign strain');
-
-figure;
-h = pcolor(gridX, gridY, gridGain);
-set(h,'edgecolor',[.7 .7 .7],'facealpha',.3);
+figure( 'position', [383 506 849 414] );
+imagesc([gridX(1),gridX(end)],...
+               [gridY(1),gridY(end)],...
+               grid_exp_trunc);
 hold on;
 
-sz = abs(gains).*2;
-scatter(uniq_ss(:,1),uniq_ss(:,2),sz+1,gains,'filled',...
-          'MarkerFaceAlpha',.2,'MarkerEdgeAlpha',.2,'MarkerEdgeColor','k');
+sz = gains_trunc;
+sz = (sz - min(sz)) ./ range(sz);
+sz = sz.*50 + 1;
+scatter(uniq_ss(:,1),uniq_ss(:,2),sz+1,'k',...
+          'filled','MarkerFaceAlpha',.4,'MarkerEdgeAlpha',.8);
 
-set(gca,'clim',[-15 15],'ydir','normal');
-
-cmap = redblue(64);
 colormap(cmap);
+colorbar;
 
-xlabel('Centrality');
-ylabel('Prevalence (log)');
+if for_paper
+  set(gca,'ytick',[0 1 2]);
+  yticks = get(gca,'YTickLabel');
+  for i = 1:length(yticks)
+    yticks{i} = sprintf('$10^{%s}$',yticks{i});
+  end
+  set(gca,'YTickLabel',yticks);
+end
+
+set(gca,'ydir','normal','fontsize',12,'box','on',...
+        'ticklabelinterpreter','latex','clim',[0 round(max(grid_exp_trunc(:))/5)*5]);
+xlabel( 'Focal Node Centrality', 'interpreter', 'latex' );
+ylabel( 'Average Cluster Prevalence', 'interpreter', 'latex' );
+if for_paper
+  set(gca,'ylim',[0 log10(200)],'xlim',[0 0.037]);
+  print( gcf, ['plots/heatmap' appendix '.pdf'], '-dpdf', '-bestfit' );
+end
+
+%% Plot conditional expectations (given virulent/benign)
+divcmap = flipud(cbrewer('div','RdBu',127));
+
+grid_exp_pos_norm = (grid_exp_pos - min(grid_exp_pos(:))) ./ range(grid_exp_pos(:));
+grid_exp_neg_norm = (grid_exp_neg - min(grid_exp_neg(:))) ./ range(grid_exp_neg(:));
+
+ind_exp_pos = ceil(grid_exp_pos_norm.*63)+1;
+ind_exp_neg = ceil(grid_exp_neg_norm.*63)+1;
+
+im_exp_pos = ind2rgb(ind_exp_pos,divcmap(64:end,:));
+im_exp_neg = ind2rgb(ind_exp_neg,divcmap(1:64,:));
+
+mv = max( abs(gains) );
+          
+figure( 'position', [383 506 849 414] );
+impos = image([gridX(1),gridX(end)],...
+               [gridY(1),gridY(end)],...
+               im_exp_pos);
+
+colormap(divcmap(64:end,:)); colorbar;
+set(gca,'clim',[0 mv]);
+set(gca,'ydir','normal','fontsize',12,...
+          'box','on','ticklabelinterpreter','latex');
+xlabel( 'Focal Node Centrality', 'interpreter', 'latex' );
+ylabel( 'Average Cluster Prevalence', 'interpreter', 'latex' );
+if for_paper
+  set(gca,'ylim',[0 log10(200)],'xlim',[0 0.037],'ytick',[0 1 2]);
+  yticks = get(gca,'YTickLabel');
+  for i = 1:length(yticks)
+    yticks{i} = sprintf('$10^{%s}$',yticks{i});
+  end
+  set(gca,'yticklabel',yticks);
+end
         
-% exploitative = gains > 0;
-% Mdl = fitcsvm(uniq_ss, exploitative,'Weights',abs(gains)./max(abs(gains)),...
-%                     'KernelFunction','rbf',...
-%                     'Standardize',true,...
-%                     'OptimizeHyperparameters','auto',...
-%                     'KernelScale','auto');
-% 
-% exploitativehat = predict(Mdl,uniq_ss);
-% 
-% C = confusionmat(exploitative,exploitativehat);
-% fprintf('TPR: %.3f\n', C(2,2) / (C(1,2) + C(2,2)));
-% fprintf('FPR: %.3f\n', C(1,2) / (C(1,2) + C(2,2)));
-% 
-% figure;
-% confusionchart(exploitative,exploitativehat);
-% 
-% % figure;
-% sv = Mdl.SupportVectors;
-% plot(sv(:,1),sv(:,2),'ko');
+hold on;
+
+sz = gains(pos_ids);
+sz = (sz - min(sz)) ./ mv;
+sz = sz.*50 + 1;
+shpos = scatter(uniq_ss(pos_ids,1),uniq_ss(pos_ids,2),round(sz+1),'r',...
+                  'filled','MarkerFaceAlpha',.4,'MarkerEdgeAlpha',.8);
+
+if for_paper
+  print( gcf, ['plots/heatmap-pos' appendix '.pdf'], '-dpdf', '-bestfit' );
+end
+                
+set(impos,'visible','off');
+set(shpos,'visible','off');
+
+imneg = image([gridX(1),gridX(end)],...
+               [gridY(1),gridY(end)],...
+               im_exp_neg);
+
+sz = -gains(neg_ids);
+sz = (sz - min(sz)) ./ mv;
+sz = sz.*50 + 1;
+scatter(uniq_ss(neg_ids,1),uniq_ss(neg_ids,2),sz+1,'b',...
+          'filled','MarkerFaceAlpha',.4,'MarkerEdgeAlpha',.8);
+        
+colormap(divcmap(1:64,:));
+set(gca,'clim',[-mv 0]);
+
+if for_paper
+  print( gcf, ['plots/heatmap-neg' appendix '.pdf'], '-dpdf', '-bestfit' );
+end
+        
+colormap(divcmap); colorbar;
+set(gca,'clim',[-mv mv]);
+
+e10 = 1.2.^grid_exp_pos;
+impos.AlphaData = (e10-min(e10(:))) ./ range(e10(:));
+set(impos,'visible','on'); set(shpos,'visible','on');
+e10 = 1.2.^(-grid_exp_neg);
+imneg.AlphaData = (e10-min(e10(:))) ./ range(e10(:));
+
+if for_paper
+  print( gcf, ['plots/heatmap-posneg' appendix '.pdf'], '-dpdf', '-bestfit' );
+end
+
+figure;
+cdfplot(gain);
+hold on;
+cdfplot(grid_exp_trunc(:));
+legend('Actual', 'Estimate');
+xlabel('Virulence (Final - initial prevalence)');
+
+figure;
+cdfplot(gain(gain>0));
+hold on;
+cdfplot(grid_exp_pos(:));
+legend('Actual', 'Estimate');
+xlabel('Virulence (Final - initial prevalence)');
+
+figure;
+cdfplot(gain(gain<=0));
+hold on;
+cdfplot(grid_exp_neg(:));
+legend('Actual', 'Estimate');
+xlabel('Virulence (Final - initial prevalence)');
 
 %% Path characteristics
 
@@ -234,7 +305,10 @@ lh = legend( sprintf('RL-BT (%.2f)', mean(rl_bt)),...
 set(lh,'interpreter','latex','fontsize',12);
 set(gca, 'fontsize', 12, 'ticklabelinterpreter', 'latex');
 axis tight;
-print(gcf, ['plots/length-direction' appendix '.pdf'], '-dpdf');
+
+if for_paper
+  print(gcf, ['plots/length-direction' appendix '.pdf'], '-dpdf');
+end
 
 figure( 'position',[1169 618 570 341] );
 hold on;
@@ -253,7 +327,10 @@ lh = legend( sprintf('RL-BT (%d)', round(mean(rl_bt).*sum(Ns))),...
 set(lh,'interpreter','latex','fontsize',12);
 set(gca, 'fontsize', 12, 'ticklabelinterpreter', 'latex');
 axis tight;
-print(gcf, ['plots/length-direction-num' appendix '.pdf'], '-dpdf');
+
+if for_paper
+  print(gcf, ['plots/length-direction-num' appendix '.pdf'], '-dpdf');
+end
 
 [rho,pval] = corr(ell,y_f-y_i);
 figure;
@@ -261,4 +338,110 @@ plot(ell,y_f-y_i,'k.');
 hold on;
 plot(ul,mus,'k--');
 
-fprintf('Correlation of path length to incidence: %.2f [p = %.3g]\n', rho,pval);
+fprintf('Correlation of path length to prevalence: %.2f [p = %.3g]\n', rho,pval);
+
+%% Plot characteristics within basin
+
+% Define basin as 75% of the max expectation
+basin_cutoff = 0.75.*max(grid_exp_trunc(:));
+
+within_basin = grid_exp_trunc >= basin_cutoff;
+
+min_xi = min(gridX(within_basin));
+max_xi = max(gridX(within_basin));
+
+min_lyi = min(gridY(within_basin));
+max_lyi = max(gridY(within_basin));
+
+fprintf('Expected value cut-off for "basin": %.3f\n', basin_cutoff);
+fprintf('Basin {centrality range, prevalence range (log)}: {%.3g--%.3g, %.3g--%.3g (%.3g--%.3g)}\n',...
+            min_xi, max_xi, 10.^min_lyi, 10.^max_lyi, min_lyi, max_lyi);
+
+paths_within_basin = x_i > min_xi & x_i < max_xi & ly_i > min_lyi & ly_i < max_lyi;
+
+fprintf('Proportion of paths within basin: %.3f\n', mean(paths_within_basin))
+
+x_ib = x_i(paths_within_basin);
+x_fb = x_f(paths_within_basin);
+
+y_ib = y_i(paths_within_basin);
+y_fb = y_f(paths_within_basin);
+
+unodes = unique([x_ib,y_ib],'rows');
+unodes_orig = unique([x_i,y_i],'rows');
+
+fprintf('Proportion of nodes within basin: %.3f\n', length(unodes) ./ length(uniq_ss));
+fprintf('Proportion of nodes with >0 paths within basin: %.3f\n', length(unodes) ./ length(unodes_orig));
+
+lrb = x_fb>x_ib;
+btb = y_fb>y_ib;
+
+rlb = ~lrb;
+tbb = ~btb;
+
+rl_btb = rlb & btb;
+lr_btb = lrb & btb;
+rl_tbb = rlb & tbb;
+lr_tbb= lrb & tbb;
+
+fprintf('[In basin] Average direction:\n| %.2f | %.2f |\n| %.2f | %.2f |\n',...
+          mean(lr_tbb), mean(rl_tbb), mean(lr_btb), mean(rl_btb) );
+
+ellb = ell(paths_within_basin);
+        
+ulb = unique(ell);
+musb = zeros(length(ulb),1);
+Nsb = zeros(length(ulb),1);
+dirsb = zeros(length(ulb),4);
+for i = 1:length(ulb)
+    id = ellb == ulb(i);
+    musb(i) = mean(y_fb(id)-y_i(id));
+    Nsb(i) = sum(id);
+    dirsb(i,:) = [mean(rl_btb(id)), mean(lr_btb(id)), mean(rl_tbb(id)), mean(lr_tbb(id))];
+end
+
+%% Path characteristics [within basin]
+
+figure( 'position',[1169 618 570 341] );
+hold on;
+linstyle = {'ko-', 'k^-','k.-','k--'};
+for i = 1:4
+  plot(ul,dirsb(:,i),linstyle{i});
+end
+xlabel('Chain length', 'interpreter', 'latex');
+ylabel('Proportion of chains', 'interpreter', 'latex');
+lh = legend( sprintf('RL-BT (%.2f)', mean(rl_btb)),...
+              sprintf('LR-BT (%.2f)', mean(lr_btb)),...
+              sprintf('RL-TB (%.2f)', mean(rl_tbb)),...
+              sprintf('LR-TB (%.2f)', mean(lr_tbb)),...
+              'location','NorthWest');
+
+set(lh,'interpreter','latex','fontsize',12);
+set(gca, 'fontsize', 12, 'ticklabelinterpreter', 'latex');
+axis tight;
+
+figure( 'position',[1169 618 570 341] );
+hold on;
+linstyle = {'ko-', 'k^-','k.-','k--'};
+for i = 1:4
+  plot(ul,dirsb(:,i).*Ns,linstyle{i});
+end
+xlabel('Chain length', 'interpreter', 'latex');
+ylabel('Number of chains', 'interpreter', 'latex');
+lh = legend( sprintf('RL-BT (%d)', round(mean(rl_btb).*sum(Nsb))),...
+            sprintf('LR-BT (%d)', round(mean(lr_btb).*sum(Nsb))),...
+            sprintf('RL-TB (%d)', round(mean(rl_tbb).*sum(Nsb))),...
+            sprintf('LR-TB (%d)', round(mean(lr_tbb).*sum(Nsb))),...
+            'location','NorthWest');
+
+set(lh,'interpreter','latex','fontsize',12);
+set(gca, 'fontsize', 12, 'ticklabelinterpreter', 'latex');
+axis tight;
+
+[rho,pval] = corr(ellb,y_fb-y_ib);
+figure;
+plot(ellb,y_fb-y_ib,'k.');
+hold on;
+plot(ulb,musb,'k--');
+
+fprintf('[In basin] Correlation of path length to prevalence: %.2f [p = %.3g]\n', rho,pval);
