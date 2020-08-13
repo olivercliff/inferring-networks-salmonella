@@ -1,20 +1,17 @@
-function computeCDFs(matfile,approach,multiple_loci,up_to_ml)
+function computeCDFs(matfile,approach,multiple_loci)
 % Build the cumua
 
-if nargin < 5
-  up_to_ml = false;
-end
-
-if multiple_loci
-  fld = 'multiloci';
-else
-  fld = 'singleloci';
+switch multiple_loci
+  case 0
+    fld = 'singleloci';
+  case 1
+    fld = 'multiloci';
+  case 2
+    fld = 'ubloci';
 end
 
 load( matfile, 'network', 'events' );
 mynet = network.(approach);
-
-mynet.(fld).cdfs.up_to_ml = up_to_ml;
 
 %% Build frequency distributions
 
@@ -38,7 +35,7 @@ indf_hist = zeros(length(edges)-1,L,M);
 fprintf('Building frequency distributions...\n');
 
 events.(approach).occurances = false(T,M);
-events.(approach).genetic_distances = inf(T,M);
+events.(approach).(fld).genetic_distances = inf(T,M);
 
 event_profile_ids = events.(['id_' approach]);
 event_profiles = mynet.profile(event_profile_ids,:);
@@ -56,16 +53,15 @@ for m = 1:M
     n_loci_changed = L - sum(loci_changes == 0, 2 );
     l1_norm = sum(loci_changes, 2);
 
-    if multiple_loci
-      if up_to_ml
-        l1_norm(n_loci_changed > l1_norm) = inf;
-      else
+    switch multiple_loci
+      case 0
+        l1_norm(n_loci_changed > 1) = inf;
+      case 1
         l1_norm(n_loci_changed ~= l1_norm) = inf;
-      end
-    else
-      l1_norm(n_loci_changed > 1) = inf;
+      case 2
+        l1_norm(n_loci_changed > l1_norm) = inf;
     end
-    events.(approach).genetic_distances(:,m) = l1_norm;
+    events.(approach).(fld).genetic_distances(:,m) = l1_norm;
 
     for l = 1:L
 

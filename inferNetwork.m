@@ -4,10 +4,13 @@ if nargin < 4
   alpha = 0.05;
 end
 
-if multiple_loci
-  fld = 'multiloci';
-else
-  fld = 'singleloci';
+switch multiple_loci
+  case 0
+    fld = 'singleloci';
+  case 1
+    fld = 'multiloci';
+  case 2
+    fld = 'ubloci';
 end
 
 % Load and preprocess data
@@ -24,10 +27,10 @@ fprintf('Building adjacency matrix...\n');
 
 event_profile_ids = events.(['id_' approach]);
 
-adj_mat = buildAdjacency(mynet,events.dates,event_profile_ids,events.(approach).genetic_distances,cdfs,4,alpha);
+adj = buildAdjacency(mynet,events.dates,event_profile_ids,events.(approach).(fld).genetic_distances,cdfs,4,alpha);
 fprintf('Done.\n');
 
-fprintf('Nodes in the directed network: %d\n', sum(sum(adj_mat,2)>0));
+fprintf('Nodes in the directed network: %d\n', sum(sum(adj,2)>0 | sum(adj,1)'>0));
 
 %% Find all paths
 
@@ -39,7 +42,7 @@ for i = 1:M
   node_name{i} = sprintf('%d-%d-%d-%d-%d',mynet.profile(i,:));
 end
 
-G = digraph(adj_mat,node_name,'OmitSelfLoops'); % Create graph object
+G = digraph(adj,node_name,'OmitSelfLoops'); % Create graph object
 
 % Having two for loops like this should speed up the parallelisation a bit
 tic
@@ -56,9 +59,10 @@ for m_i = 1:M
   all_paths = [all_paths; paths{m_i}];
 end
 unique_paths = findUniquePaths(all_paths);
+
 toc
 
-mynet.(fld).adj_mat = adj_mat;
+mynet.(fld).adj_mat = adj;
 mynet.(fld).unique_paths = unique_paths;
 
 % Save adjacency and paths back to network file

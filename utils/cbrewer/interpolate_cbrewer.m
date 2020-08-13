@@ -8,7 +8,7 @@ function [interp_cmap]=interpolate_cbrewer(cbrew_init, interp_method, ncolors)
 %               'nearest' - nearest neighbor interpolation
 %               'linear'  - bilinear interpolation
 %               'spline'  - spline interpolation
-%               'cubic'   - bicubic interpolation as long as the data is
+%               'pchip'   - bicubic interpolation as long as the data is
 %                           uniformly spaced, otherwise the same as 'spline'
 %   - ncolors=desired number of colors 
 %

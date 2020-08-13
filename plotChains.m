@@ -1,4 +1,4 @@
-function plotChains(matfile,approach,multiple_loci)
+function plotChains(matfile,approach,multiple_loci,marker_scaler)
 
 plot_case_studies = false;
 
@@ -28,9 +28,15 @@ in_graph = sum(adj,2)>0 | sum(adj,1)'>0;
 mp = max(clusters.mean_inc(in_graph));
 mpn = find(clusters.mean_inc == mp);
 
+fprintf('Most prevalent node: %s (prevalence: %.3g)\n',...
+          mat2str(net.profile(mpn,:)), clusters.mean_inc(mpn));
 
 % Plot which nodes are in the graph
-G = digraph(adj);
+try
+    G = digraph(adj,net.names);
+catch
+    G = digraph(adj);
+end
 components = conncomp(G,'Type','weak')';
 unique_comp = unique(components);
 size_comp = zeros(size(components));
@@ -41,10 +47,18 @@ for c = 1:length(unique_comp)
 %     sum_comp_inc(ids) = sum(mean_inc(ids).*num_members(ids));
 end
 
+fprintf('Number of edges: %d\n', height(G.Edges));
+fprintf('Number of nodes: %d\n', sum(in_graph));
+
 load('utils/yellow-green_cmap.mat','cmap');
 
 distance_mode = true;
-zoom_modes = 0:2; % 0 = no zoom, 1 == north ryde, 2 == cabra/turra/longest
+
+if nargin < 4
+    zoom_modes = 0:2; % 0 = no zoom, 1 == north ryde, 2 == cabra/turra/longest
+else
+    zoom_modes = 3;
+end
 
 node_sz_range = 15;
 node_sz_min = 5;
@@ -55,15 +69,19 @@ for i = 1:length(zoom_modes)
   
   zoom_mode = zoom_modes(i);
 
-  marker_scaler = 1;
-  if zoom_mode == 1
-    marker_scaler = 10;
-  elseif zoom_mode == 2
-    marker_scaler = 5;
+  if nargin < 4
+      marker_scaler = 1;
+      if zoom_mode == 1
+        marker_scaler = 10;
+      elseif zoom_mode == 2
+        marker_scaler = 5;
+      end
   end
 
   node_sz = (clusters.num_members - min(clusters.num_members)) ./ range(clusters.num_members);
   node_sz = node_sz .* node_sz_range + node_sz_min;
+  
+  node_sz(isnan(node_sz)) = 1;
 
   hold on;
   scatter( 1 ./ net.path_lengths(~in_graph), clusters.mean_inc(~in_graph),...
@@ -134,7 +152,9 @@ for i = 1:length(zoom_modes)
     apx2 = '-dist';
   end
 
-  set(gca,'DataAspectRatioMode', 'manual', 'DataAspectRatio',[1 8000 50]);
+  if zoom_mode < 3
+    set(gca,'DataAspectRatioMode', 'manual', 'DataAspectRatio',[1 8000 50]);
+  end
   if zoom_mode == 2
     set(gca,'xlim',[0.0297 0.0365],'ylim',[15.0807 69.5206]);
   elseif zoom_mode == 1
@@ -149,13 +169,16 @@ for i = 1:length(zoom_modes)
     print( gcf, ['plots/network-trace' appendix apx2 '_north-ryde.pdf'], '-dpdf', '-bestfit' );
   elseif zoom_mode == 2
     print( gcf, ['plots/network-trace' appendix apx2 '_cabra-turra.pdf'], '-dpdf', '-bestfit' );
+  elseif zoom_mode == 3
+    colorbar;
+    print( gcf, ['plots/network-trace' appendix apx2 sprintf('-D%d',network.cluster_D) '.pdf'], '-dpdf', '-bestfit' );
   end
 end
 
 %% Plot correlations
 
 figure('position',[257   660   570   357]);
-plot( net.pdist( in_graph, mpn ), clusters.mean_inc( in_graph ), 'k.' );
+plot( net.pdist( in_graph, mpn ), clusters.mean_inc(in_graph), 'k.' );
 
 set( gca, 'fontsize', 12, 'yscale', 'log', 'box', 'on', 'ticklabelinterpreter', 'latex' );
 xlabel( 'Distance to Most Prevalent Node', 'interpreter', 'latex' );
@@ -167,11 +190,11 @@ ylabel( 'Average Cluster Prevalence', 'interpreter', 'latex' );
 % max_X = max(D( in_graph, mp_node ));
 % plot( [min_X, max_X], [curve(min_X), curve(round(max_X/2))], 'r-' );
 
-[rho,pval] = corr( net.pdist( in_graph, mpn ), log10(clusters.mean_inc(in_graph)) );
-fprintf('Correlation of log(prevalence) to distance to MPN: %.3g [p=%.3g]\n', rho, pval);
+[rho,pval] = corr(net.pdist(in_graph,mpn),log10(clusters.mean_inc(in_graph)));
+fprintf('Correlation of distance-to-MPN to log-prevalence: %.3g [N = %d, p=%.3g]\n', rho, sum(in_graph), pval);
 
 
-print( gcf, ['dist_prev' appendix apx2 '.pdf'], '-dpdf', '-bestfit' );
+print( gcf, ['plots/dist_prev' appendix apx2 '.pdf'], '-dpdf', '-bestfit' );
 
 figure('position',[832   659   570   358]);
 plot( size_comp(in_graph), clusters.mean_inc(in_graph), 'k.' );
@@ -180,5 +203,5 @@ set( gca, 'fontsize', 12, 'xscale', 'log', 'yscale', 'log', 'box', 'on', 'tickla
 xlabel( 'Size of Component', 'interpreter', 'latex' );
 ylabel( 'Average Cluster Prevalence', 'interpreter', 'latex' );
 
-[rho,pval] = corr( log10(size_comp(in_graph)), log10(clusters.mean_inc(in_graph)) );
-fprintf('Correlation of log(prevalence) to log(component size): %.3g [p=%.3g]\n', rho, pval);
+[rho,pval] = corr(log10(size_comp(in_graph)),log10(clusters.mean_inc(in_graph)));
+fprintf('Correlation of log-component-size to log-prevalence: %.3g [N = %d, p=%.3g]\n', rho, sum(in_graph), pval);

@@ -3,6 +3,7 @@ function plotUndirectedGraph(matfile,approach)
 load( matfile, 'network' );
 
 mynet = network.(approach);
+clusters = mynet.clusters.overlapping;
 
 marker_sz = 30;
 marker_col = [.4 .4 .4];
@@ -10,13 +11,13 @@ marker_alpha = .7;
 
 %% Overlapping Approach
 
-[ ~, focus_node ] = max( mynet.mean_inc );
+[ ~, focus_node ] = max( clusters.mean_inc );
 
 member_scaler = 0.8;
 
 figure( 'position', [460 369 1110 564] );
-scatter( 1 ./ mynet.path_lengths, mynet.mean_inc,...
-          mynet.num_members .* member_scaler, log10( mynet.pdist( :, focus_node ) ),...
+scatter( 1 ./ mynet.path_lengths, clusters.mean_inc,...
+          clusters.num_members .* member_scaler, log10( mynet.pdist( :, focus_node ) ),...
           'filled', 'markerfacealpha', marker_alpha );
         
 set( gca, 'fontsize', 12, 'yscale', 'log', 'box', 'on', 'ticklabelinterpreter', 'latex' );
@@ -28,8 +29,8 @@ bins = discretize( 1 ./ mynet.path_lengths, edges );
 avgs = zeros( length( edges ), 1 );
 stds = zeros( length( edges ), 1 );
 for i = 1:length( edges )
-    avgs(i) = mean( mynet.mean_inc( bins == i ) );
-    stds(i) = std( mynet.mean_inc( bins == i ) );
+    avgs(i) = mean( clusters.mean_inc( bins == i ) );
+    stds(i) = std( clusters.mean_inc( bins == i ) );
 end
 
 hold on;

@@ -12,8 +12,10 @@ N = height(dat);
 % Read in data, throwing out the incorrectly coded values
 invalid = false(N,1);
 mlva_profile = zeros(N,5);
+name = cell(N,1);
 for i = 1:N
-  out = sscanf(dat.MLVAType{i},'%d-%d-%d-%d-%d',[1,5]);
+  name{i} = dat.MLVAType{i};
+  out = sscanf(name{i},'%d-%d-%d-%d-%d',[1,5]);
   try
     mlva_profile(i,:) = out;
   catch
@@ -23,6 +25,7 @@ for i = 1:N
 end
 
 mlva_profile(invalid,:) = [];
+name(invalid) = [];
 
 % Initialise the events table with the genotype and date collected
 mlva_type = dat.MLVAType(~invalid);
@@ -72,11 +75,22 @@ for i = 1:length(approaches)
   % ...to the unique profile
   network.(approaches{i}).profile = unique_profiles;
   
+  network.(approaches{i}).names = cell(length(unique_profiles),1);
+  for p = 1:size(unique_profiles,1)
+    cname = [];
+    for l = 1:size(unique_profiles,2)-1
+      cname = [cname sprintf('%d-',network.(approaches{i}).profile(p,l))];
+    end
+    network.(approaches{i}).names{p} = [cname sprintf('%d',network.(approaches{i}).profile(p,end))];
+  end
+  
   % Number of times each profile was recorded
   network.(approaches{i}).n_incidences = histcounts(id,(1:size(unique_profiles,1)+1)-0.5);
   
   % Pairwise distances between all profiles using the L1-norm
-  network.(approaches{i}).pdist = squareform( pdist( unique_profiles, 'cityblock' ) );
+  pd = squareform( pdist( unique_profiles, 'cityblock' ) );
+%   pd(pd < 1 & pd > 0) = 1;
+  network.(approaches{i}).pdist = pd;
 
   % Get edge weights
   ew = 1 ./ network.(approaches{i}).pdist;
