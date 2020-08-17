@@ -312,8 +312,8 @@ hold on;
 h = cdfplot(grid_exp_trunc(:));
 set(h,'color','r','linewidth',2);
 lh = legend('Actual', 'Estimate','Location','Best');
-xlabel('Virulence (Final - initial prevalence)','interpreter','latex');
-ylabel('F(x)','interpreter','latex')
+xlabel('Change in prevalence','interpreter','latex');
+ylabel('$F(x)$','interpreter','latex');
 set(lh,'interpreter','latex','fontsize',12);
 set(gca, 'fontsize', 12, 'ticklabelinterpreter', 'latex');
 title('');
@@ -328,8 +328,8 @@ hold on;
 h = cdfplot(grid_exp_pos(:));
 set(h,'color','r','linewidth',2);
 lh = legend('Actual', 'Estimate','Location','Best');
-xlabel('Virulence (Final - initial prevalence)','interpreter','latex');
-ylabel('F(x)','interpreter','latex')
+xlabel('Change in prevalence','interpreter','latex');
+ylabel('$F(x)$','interpreter','latex');
 set(lh,'interpreter','latex','fontsize',12);
 set(gca, 'fontsize', 12, 'ticklabelinterpreter', 'latex');
 title('');
@@ -344,8 +344,8 @@ hold on;
 h = cdfplot(grid_exp_neg(:));
 set(h,'color','r','linewidth',2);
 lh = legend('Actual', 'Estimate','Location','Best');
-xlabel('Virulence (Final - initial prevalence)','interpreter','latex');
-ylabel('F(x)','interpreter','latex')
+xlabel('Change in prevalence','interpreter','latex');
+ylabel('$F(x)$','interpreter','latex');
 set(lh,'interpreter','latex','fontsize',12);
 set(gca, 'fontsize', 12, 'ticklabelinterpreter', 'latex');
 title('');
