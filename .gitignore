@@ -1,3 +1,4 @@
 data/*.mat
+data/salmonella_2017_fixed.csv
 plots/*
 *~
