@@ -77,8 +77,8 @@ end
 %% Set up grid and observations
 
 if for_paper
-  xcells = 300;
-  ycells = 300;
+  xcells = 1000;
+  ycells = 1000;
 else
   xcells = 100;
   ycells = 100;
