@@ -1,11 +1,13 @@
-function plotChains(matfile,appheroach,multiple_loci,marker_scaler)
-
-plot_case_studies = false;
+function plotCentralityPrevalenceSpace(matfile,approach,multiple_loci,marker_scaler,plot_case_studies)
 
 if multiple_loci
   fld = 'multiloci';
 else
   fld = 'singleloci';
+end
+
+if nargin < 5
+  plot_case_studies = false;
 end
 
 appendix = [ '_' approach '_' fld];
@@ -101,44 +103,31 @@ for i = 1:length(zoom_modes)
   end
 
   if plot_case_studies
-    north_ryde = 346; % Vitali north ryde, isolated chain (length 9)
-    rockdale = 754; % Rockdale, 2014
-    turramurra = 158; % Turramurra, 2013
-    longest_chain = 354; % Longest chain
-    cabra = 691; % Cabra, 2015
+    
+    paths = net.(fld).unique_paths;
+    
+    case_studies = [3,10,7,14,523;
+                    3,12,9,10,550;
+                    3,16,9,11,523];
 
-    % sb_nodes = longest_chain;
-    % sb_nodes = turramurra;
-    sb_nodes = [longest_chain north_ryde turramurra cabra];
+    cs_col = {[1 0 1], [0 0 1], [1 0 0], [0 0 0]};
+    
+    [~,cs_ids] = intersect(network.unadjusted.profile,case_studies,'rows');
+      
+    % Find the longest paths that starts with these MLVAs
+    [~,cs_paths] = findLongestPath(paths,cs_ids);
+    cs_ls = {'-','-','-',':'};
+    
+    [~,mpid] = max(cellfun(@length,paths))
+    cs_paths = [cs_paths;paths(mpid)];
 
-    sb_chains = cell(length(sb_nodes),1);
-
-    sb_col = {[0 0 0],[0 0 1], [1 0 1], [1 0 0]};
-    sb_ls = {':','-','-','-'};
-
-    % sb_col = {[1 0 1]};
-    % sb_ls = {'-'};
-    for s = 1:length(sb_nodes)
-      in_paths = false(U,1);
-      for i = 1:U
-        if sum(ismember(paths{i},sb_nodes(s))) == 1
-          in_paths(i) = true;
-        end
-      end
-
-      superbug_chains = find(in_paths);
-      [~,max_sb_chain] = max(ell(superbug_chains));
-
-      sb_chain = paths{superbug_chains(max_sb_chain)};
-
-      sb_xs = 1./net.path_lengths(sb_chain);
-      sb_ys = clusters.mean_inc(sb_chain);
+    for s = 1:length(cs_paths)
+      cs_xs = 1./net.path_lengths(cs_paths{s});
+      cs_ys = clusters.mean_inc(cs_paths{s});
 
       mk_sz = 3;
-      plot( sb_xs, sb_ys, sb_ls{s}, 'color', sb_col{s}, 'linewidth', 1 );
-      plot( sb_xs(1), sb_ys(1), 'o', 'color', sb_col{s}, 'markersize', mk_sz .* marker_scaler );
-
-      sb_chains{s} = sb_chain;
+      plot( cs_xs, cs_ys, cs_ls{s}, 'color', cs_col{s}, 'linewidth', 1 );
+      plot( cs_xs(1), cs_ys(1), 'o', 'color', cs_col{s}, 'markersize', mk_sz .* marker_scaler );
     end
   end
 
