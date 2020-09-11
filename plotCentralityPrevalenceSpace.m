@@ -1,4 +1,4 @@
-function plotChains(matfile,approach,multiple_loci,marker_scaler)
+function plotChains(matfile,appheroach,multiple_loci,marker_scaler)
 
 plot_case_studies = false;
 
